@@ -1648,7 +1648,7 @@ def render_frames_to_disk(rk: Rankings, snapshot: str, period_fr: str,
                     3.0
                 ))
 
-                result["frames"].append(shot(html_cta(rk, snapshot, period_fr), 4.5))
+                result["frames"].append(shot(html_cta(rk, snapshot, period_fr), 7.0))
 
                 browser.close()
         except Exception as e:
