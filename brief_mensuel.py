@@ -1606,11 +1606,10 @@ def html_cta(rk: Rankings, snapshot: str, period_fr: str) -> str:
 
 
 def render_frames_to_disk(rk: Rankings, snapshot: str, period_fr: str,
-                          tmp_dir: Path) -> list[tuple[str, list[tuple[Path, float]]]]:
-    """Render all frames to PNG files. Returns sections : [(section_name, [(path, duration), ...]), ...].
-    🆕 v7 — Sections : cover · perf · conv · sectors · cta (utilisées pour xfade transitions).
+                          tmp_dir: Path) -> list[tuple[Path, float]]:
+    """Render all frames to PNG files. Returns flat list [(path, duration_seconds), ...].
     Wrapped in a thread to avoid Jupyter asyncio conflict."""
-    result: dict[str, Any] = {"sections": [], "error": None}
+    result: dict[str, Any] = {"frames": [], "error": None}
 
     def _work():
         # ── FIX Windows + Jupyter ─────────────────────────────────
@@ -1637,48 +1636,39 @@ def render_frames_to_disk(rk: Rankings, snapshot: str, period_fr: str,
                     page.screenshot(path=str(out_path), full_page=False)
                     return (out_path, dur_s)
 
-                # ── SECTION 1 : COVER (3 frames Ken Burns) ──────
-                cover_frames = []
+                # ── COVER (3 frames Ken Burns) ──────────────────
                 for f, d in [(1, 0.4), (2, 1.2), (3, 2.2)]:
-                    cover_frames.append(shot(html_cover(rk, snapshot, period_fr, f), d))
-                result["sections"].append(("cover", cover_frames))
+                    result["frames"].append(shot(html_cover(rk, snapshot, period_fr, f), d))
 
-                # ── SECTION 2 : TOP PERF (défilement 0.5s/ligne + hold 2.5s) ──
-                perf_frames = []
+                # ── TOP PERF (défilement 0.5s/ligne + hold 2.5s) ──
                 for v in range(1, N_TOP_VIDEO + 1):
-                    perf_frames.append(shot(html_perf(rk, snapshot, period_fr, v), 0.5))
-                perf_frames.append(shot(html_perf(rk, snapshot, period_fr, N_TOP_VIDEO), 2.5))
-                result["sections"].append(("perf", perf_frames))
+                    result["frames"].append(shot(html_perf(rk, snapshot, period_fr, v), 0.5))
+                result["frames"].append(shot(html_perf(rk, snapshot, period_fr, N_TOP_VIDEO), 2.5))
 
-                # ── SECTION 3 : TOP CONV (défilement 0.5s/ligne + hold 2.5s) ──
-                conv_frames = []
+                # ── TOP CONV (défilement 0.5s/ligne + hold 2.5s) ──
                 for v in range(1, N_TOP_VIDEO + 1):
-                    conv_frames.append(shot(html_conv(rk, snapshot, period_fr, v), 0.5))
-                conv_frames.append(shot(html_conv(rk, snapshot, period_fr, N_TOP_VIDEO), 2.5))
-                result["sections"].append(("conv", conv_frames))
+                    result["frames"].append(shot(html_conv(rk, snapshot, period_fr, v), 0.5))
+                result["frames"].append(shot(html_conv(rk, snapshot, period_fr, N_TOP_VIDEO), 2.5))
 
-                # ── SECTION 4 : SECTEURS (défilement 0.3s + hold 3s) ──
+                # ── SECTEURS (défilement 0.3s + hold 3s) ────────
                 n_sec_pea = min(len(rk.sec_pea), 11)
                 n_sec_cto = min(len(rk.sec_cto), 11)
                 n_sec_max = max(n_sec_pea, n_sec_cto)
-                sectors_frames = []
                 for v in range(1, n_sec_max + 1):
-                    sectors_frames.append(shot(
+                    result["frames"].append(shot(
                         html_sectors(rk, snapshot, period_fr,
                                      visible_pea=min(v, n_sec_pea),
                                      visible_cto=min(v, n_sec_cto)),
                         0.3
                     ))
-                sectors_frames.append(shot(
+                result["frames"].append(shot(
                     html_sectors(rk, snapshot, period_fr,
                                  visible_pea=n_sec_pea, visible_cto=n_sec_cto),
                     3.0
                 ))
-                result["sections"].append(("sectors", sectors_frames))
 
-                # ── SECTION 5 : CTA finale (7s pour lecture confortable) ──
-                cta_frames = [shot(html_cta(rk, snapshot, period_fr), 7.0)]
-                result["sections"].append(("cta", cta_frames))
+                # ── CTA finale (7s) ─────────────────────────────
+                result["frames"].append(shot(html_cta(rk, snapshot, period_fr), 7.0))
 
                 browser.close()
         except Exception as e:
@@ -1688,141 +1678,75 @@ def render_frames_to_disk(rk: Rankings, snapshot: str, period_fr: str,
     t.start(); t.join()
     if result["error"]:
         raise result["error"]
-    return result["sections"]
+    return result["frames"]
 
 
-def _assemble_section_clip(frames: list[tuple[Path, float]], out_clip: Path) -> float:
-    """Encode une section en MP4 intermédiaire (preset rapide, CRF 18 = quasi-lossless).
-    Retourne la durée de la section."""
-    list_file = out_clip.parent / f"_{out_clip.stem}_list.txt"
-    section_duration = sum(d for _, d in frames)
+def assemble_mp4(frames: list[tuple[Path, float]], output: Path) -> None:
+    """Assemble PNG frames into MP4 H.264 — version SIMPLE concat demuxer.
+    Garantit que chaque frame est affichée pendant sa durée custom (défilement Top 10)."""
+    list_file = output.parent / f"{output.stem}_list.txt"
+    total_duration = sum(d for _, d in frames)
     with open(list_file, "w", encoding="utf-8") as f:
         for path, dur in frames:
             f.write(f"file '{path.resolve()}'\n")
             f.write(f"duration {dur:.3f}\n")
         f.write(f"file '{frames[-1][0].resolve()}'\n")
 
-    cmd = [
-        FFMPEG_BIN, "-y", "-loglevel", "error",
-        "-f", "concat", "-safe", "0", "-i", str(list_file),
-        "-pix_fmt", "yuv420p",
-        "-c:v", "libx264",
-        "-preset", "fast",  # encodage rapide pour la pass intermédiaire
-        "-crf", "18",       # quasi-lossless (perte de qualité négligeable au final encoding)
-        "-r", str(VIDEO_FPS),
-        "-t", f"{section_duration:.3f}",
-        str(out_clip),
-    ]
-    subprocess.run(cmd, check=True)
-    list_file.unlink(missing_ok=True)
-    return section_duration
-
-
-def assemble_mp4(sections: list[tuple[str, list[tuple[Path, float]]]], output: Path) -> None:
-    """🆕 v7 — Assemble PNG frames into MP4 with xfade transitions between sections.
-
-    Workflow :
-      1. Encode chaque section en MP4 intermédiaire (concat demuxer + preset fast)
-      2. Chaîne les sections avec xfade (filter_complex) + applique musique/fade/vignette
-    """
-    tmp_root = output.parent
-    section_clips: list[tuple[Path, float]] = []
-
-    log.info("   📦 Étape 1 : encodage des %d sections en MP4 intermédiaires…", len(sections))
-    for name, frames in sections:
-        clip_path = tmp_root / f"_section_{name}_{output.stem}.mp4"
-        duration = _assemble_section_clip(frames, clip_path)
-        log.info("      ✓ %s : %d frames · %.1fs", name, len(frames), duration)
-        section_clips.append((clip_path, duration))
-
-    total_duration_no_xfade = sum(d for _, d in section_clips)
-    n_transitions = len(section_clips) - 1
-    total_duration = total_duration_no_xfade - (n_transitions * XFADE_DURATION)
-    log.info("   📐 Durée finale après xfade : %.1fs (avant : %.1fs · %d transitions × %.1fs)",
-             total_duration, total_duration_no_xfade, n_transitions, XFADE_DURATION)
-
     has_music = MUSIC_FILE.exists() and MUSIC_FILE.is_file()
     if has_music:
         log.info("   🎵 Musique trouvée → %s", MUSIC_FILE)
     else:
-        log.info("   🔇 Pas de musique → piste silencieuse AAC")
+        log.info("   🔇 Pas de musique (assets/music.mp3 absent) → piste silencieuse AAC")
 
     fade_out_start = max(0, total_duration - VIDEO_FADE_OUT)
-
-    # ── Build ffmpeg command : inputs + filter_complex avec xfade en cascade ──
-    log.info("   🎬 Étape 2 : assemblage final avec xfade transitions…")
-    cmd = [FFMPEG_BIN, "-y", "-loglevel", "error"]
-
-    # Inputs : tous les clips de section
-    for clip, _ in section_clips:
-        cmd.extend(["-i", str(clip)])
-
-    # Input audio (musique ou silence)
-    n_video_inputs = len(section_clips)
-    if has_music:
-        cmd.extend(["-stream_loop", "-1", "-i", str(MUSIC_FILE.absolute())])
-    else:
-        cmd.extend(["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"])
-    audio_input_idx = n_video_inputs
-
-    # ── Build filter_complex pour xfade en cascade ──
-    # Format : [0:v][1:v]xfade=transition=fade:duration=D:offset=O1[v01];
-    #          [v01][2:v]xfade=transition=fade:duration=D:offset=O2[v012]; ...
-    filters = []
-    cumulative_offset = 0.0
-    last_label = "[0:v]"
-    for i in range(1, n_video_inputs):
-        # offset = somme des durées précédentes - sommes des transitions précédentes
-        cumulative_offset += section_clips[i - 1][1] - XFADE_DURATION
-        new_label = f"[vx{i}]"
-        filters.append(
-            f"{last_label}[{i}:v]xfade=transition=fade:duration={XFADE_DURATION}:"
-            f"offset={cumulative_offset:.3f}{new_label}"
-        )
-        last_label = new_label
-
-    # Apply final effects on the merged video : fade out + vignette
     v_filter_parts = []
     if VIDEO_FADE_IN > 0:
         v_filter_parts.append(f"fade=t=in:st=0:d={VIDEO_FADE_IN}")
     v_filter_parts.append(f"fade=t=out:st={fade_out_start:.3f}:d={VIDEO_FADE_OUT}")
     if VIGNETTE:
         v_filter_parts.append("vignette=angle=0.5")
-    if v_filter_parts:
-        filters.append(f"{last_label}{','.join(v_filter_parts)}[vout]")
-        video_label = "[vout]"
+    v_filter = ",".join(v_filter_parts)
+
+    cmd = [
+        FFMPEG_BIN, "-y", "-loglevel", "error",
+        "-f", "concat", "-safe", "0", "-i", str(list_file),
+    ]
+
+    if has_music:
+        cmd.extend([
+            "-stream_loop", "-1",
+            "-i", str(MUSIC_FILE.absolute()),
+        ])
+        audio_filter = (
+            f"volume={AUDIO_VOLUME},"
+            f"afade=t=in:st=0:d={AUDIO_FADE_IN},"
+            f"afade=t=out:st={fade_out_start:.3f}:d={AUDIO_FADE_OUT}"
+        )
     else:
-        video_label = last_label
+        cmd.extend([
+            "-f", "lavfi",
+            "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+        ])
+        audio_filter = "anull"
 
-    # Audio filter
-    audio_filter = (
-        f"volume={AUDIO_VOLUME},"
-        f"afade=t=in:st=0:d={AUDIO_FADE_IN},"
-        f"afade=t=out:st={fade_out_start:.3f}:d={AUDIO_FADE_OUT}"
-    ) if has_music else "anull"
-    filters.append(f"[{audio_input_idx}:a]{audio_filter}[aout]")
-
-    filter_complex = ";".join(filters)
-    cmd.extend(["-filter_complex", filter_complex])
     cmd.extend([
-        "-map", video_label,
-        "-map", "[aout]",
+        "-fps_mode", "vfr",
         "-pix_fmt", "yuv420p",
         "-c:v", "libx264",
         "-preset", VIDEO_PRESET,
         "-crf", str(VIDEO_CRF),
+        "-vf", v_filter,
         "-c:a", "aac",
         "-b:a", AUDIO_BITRATE,
+        "-af", audio_filter,
         "-t", f"{total_duration:.3f}",
+        "-shortest",
         "-movflags", "+faststart",
         str(output),
     ])
 
     subprocess.run(cmd, check=True)
-
-    # Cleanup : supprime les clips intermédiaires
-    for clip, _ in section_clips:
-        clip.unlink(missing_ok=True)
+    list_file.unlink(missing_ok=True)
 
 
 def auto_download_music() -> None:
@@ -1865,18 +1789,15 @@ def make_video(rk: Rankings, snapshot: str, period_fr: str, suffix: str) -> Path
 
     auto_download_music()
 
-    log.info("\n🎬  Génération de la vidéo MP4 (avec transitions xfade)…")
+    log.info("\n🎬  Génération de la vidéo MP4…")
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
-        sections = render_frames_to_disk(rk, snapshot, period_fr, tmp_dir)
-        n_frames_total = sum(len(frames) for _, frames in sections)
-        log.info("   %d frames rendues dans %d sections", n_frames_total, len(sections))
-        assemble_mp4(sections, output)
+        frames = render_frames_to_disk(rk, snapshot, period_fr, tmp_dir)
+        log.info("   %d frames rendues", len(frames))
+        assemble_mp4(frames, output)
 
     size_mb = output.stat().st_size / (1024 * 1024)
-    total_dur_raw = sum(sum(d for _, d in frames) for _, frames in sections)
-    n_trans = len(sections) - 1
-    duration = total_dur_raw - n_trans * XFADE_DURATION
+    duration = sum(d for _, d in frames)
     log.info("✅  vidéo générée → %s  (%.1f MB · %.1fs)", output, size_mb, duration)
     return output
 
@@ -1992,8 +1913,8 @@ def main() -> None:
              TEST_MODE, N_TOP, N_TOP_VIDEO, N_SECTOR)
     log.info("  SEND_TO_WEBHOOK=%s  ·  LITTERBOX_EXPIRATION=%s",
              SEND_TO_WEBHOOK, LITTERBOX_EXPIRATION)
-    log.info("  VIDÉO   : %dx%d · CRF=%d · preset=%s · xfade=%.1fs · vignette=%s",
-             VIDEO_W, VIDEO_H, VIDEO_CRF, VIDEO_PRESET, XFADE_DURATION, VIGNETTE)
+    log.info("  VIDÉO   : %dx%d · CRF=%d · preset=%s · fade=%.1fs/%.1fs · vignette=%s",
+             VIDEO_W, VIDEO_H, VIDEO_CRF, VIDEO_PRESET, VIDEO_FADE_IN, VIDEO_FADE_OUT, VIGNETTE)
     log.info("  AUDIO   : %s · %s · fade=%.1fs/%.1fs · volume=%.1f",
              ("music.mp3" if MUSIC_FILE.exists() else "auto-download / silence AAC"),
              AUDIO_BITRATE, AUDIO_FADE_IN, AUDIO_FADE_OUT, AUDIO_VOLUME)
