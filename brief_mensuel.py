@@ -985,7 +985,7 @@ class Rankings:
                         .head(N_SECTOR).reset_index(drop=True))
 
         # ── Top MÉLANGÉS PEA+CTO (pour le POST LinkedIn) ─────────────
-        # Top 5 perf : par perf_1m desc, mélangé
+        # Top 5 perf : par perf_1m desc, mélangé (TOUS marchés)
         self.top_perf_all = (df.dropna(subset=["perf_1m"])
                              .sort_values("perf_1m", ascending=False)
                              .head(N_TOP))
@@ -1047,19 +1047,10 @@ def build_linkedin_post(rk: Rankings, period_fr: str, prev_month_fr: str,
         elig  = "✅PEA" if r.get("pea") else "🌍CTO"
         val   = f"{r['perf_1m']:+.1f}%" if pd.notna(r.get("perf_1m")) else "—"
 
-        # ⭐ NOM D'ENTREPRISE EN AVANT
-        line1 = f"{medal} {name}  📈 {val}  ·  {flag} {r['ticker']} {elig}"
+        # ⭐ NOM D'ENTREPRISE EN AVANT (sans lien : tickers non cliquables)
+        return f"{medal} {name}  📈 {val}  ·  {flag} {r['ticker']} {elig}"
 
-        b = r.get("boursorama_link") or ""
-        y = r.get("yahoo_link") or ""
-        links = []
-        if b: links.append(f"🏛️ BR  :  {b}")
-        if y: links.append(f"🔍 YF  :  {y}")
-        line2 = "↳ " + " · ".join(links) if links else ""
-
-        return line1 + ("\n" + line2 if line2 else "")
-
-    # ── Format ticker avec 2 liens + étoiles (Top 5 potentiel) ───────
+    # ── Format ticker (Top 5 potentiel) — sans lien ──────────────────
     def _row_pot(r: dict, rank: int) -> str:
         flag  = get_flag(r["ticker"])
         medal = {1: "🥇", 2: "🥈", 3: "🥉", 4: "4️⃣", 5: "5️⃣"}.get(rank, f"{rank:02d}")
@@ -1068,17 +1059,8 @@ def build_linkedin_post(rk: Rankings, period_fr: str, prev_month_fr: str,
         score = f"{r['total_pct']:+.1f}%"
         stars = reco_stars(r.get("reco_mean"))
 
-        # ⭐ NOM D'ENTREPRISE EN AVANT
-        line1 = f"{medal} {name}  🎯 {score}  {stars}  ·  {flag} {r['ticker']} {elig}"
-
-        b = r.get("boursorama_link") or ""
-        y = r.get("yahoo_link") or ""
-        links = []
-        if b: links.append(f"🏛️ BR  :  {b}")
-        if y: links.append(f"🔍 YF  :  {y}")
-        line2 = "↳ " + " · ".join(links) if links else ""
-
-        return line1 + ("\n" + line2 if line2 else "")
+        # ⭐ NOM D'ENTREPRISE EN AVANT (sans lien : tickers non cliquables)
+        return f"{medal} {name}  🎯 {score}  {stars}  ·  {flag} {r['ticker']} {elig}"
 
     # ── Format ticker secteur (1 ligne sans lien, plus compact) ──────
     def _row_sec(r: dict) -> str:
@@ -1159,9 +1141,9 @@ Quand un secteur baisse, un autre compense.
 
 {BAR_S}
 
-💬 ET TOI ?  🅰️ ETF · 🅱️ Stock-picking · 🅲️ Hybride
-→ Ta lettre + ta répartition en commentaire 👇
-Les meilleures réponses reprises le mois prochain.
+👍 J'aime  ·  👏 Bravo  ·  ❤️ Adore
+💬 Et toi, quelle est ta stratégie d'investissement ?
+ETF · Stock-picking · Hybride ? Détaille en commentaire 👇
 
 📌 Épingle  ·  🔁 Partage à un débutant en bourse
 
