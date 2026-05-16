@@ -1681,7 +1681,6 @@ def _assemble_section_clip(frames: list[tuple[Path, float]], out_clip: Path) -> 
     cmd = [
         FFMPEG_BIN, "-y", "-loglevel", "error",
         "-f", "concat", "-safe", "0", "-i", str(list_file),
-        "-vsync", "vfr",
         "-pix_fmt", "yuv420p",
         "-c:v", "libx264",
         "-preset", "fast",  # encodage rapide pour la pass intermédiaire
