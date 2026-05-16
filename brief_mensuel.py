@@ -1562,13 +1562,23 @@ def html_cta(rk: Rankings, snapshot: str, period_fr: str) -> str:
       <div class="desc">Diversification Europe. Complément naturel du S&amp;P 500.</div>
     </div>
   </div>
-  <div class="cta-quiz">
-    <div class="cta-quiz-q">💬 Et toi, t'es plutôt :</div>
-    <div class="cta-quiz-opts">
-      <div class="cta-quiz-opt"><b>A</b> 100% ETF, peinard ?</div>
-      <div class="cta-quiz-opt"><b>B</b> 100% stock-picking, à l'instinct ?</div>
-      <div class="cta-quiz-opt"><b>C</b> Hybride, comme moi ?</div>
+<div class="cta-quiz">
+    <div class="cta-reactions">
+      <div class="reaction-item">
+        <div class="reaction-emoji">👍</div>
+        <div class="reaction-label">J'aime</div>
+      </div>
+      <div class="reaction-item">
+        <div class="reaction-emoji">👏</div>
+        <div class="reaction-label">Bravo</div>
+      </div>
+      <div class="reaction-item">
+        <div class="reaction-emoji">❤️</div>
+        <div class="reaction-label">Adore</div>
+      </div>
     </div>
+    <div class="cta-quiz-q">💬 Réagis + commente ta stratégie</div>
+    <div class="cta-quiz-hint">ETF · Stock-picking · Hybride ? Détaille en commentaire 👇</div>
   </div>
   <div class="next-brief-badge">
     🚀 À BIENTÔT POUR LE BRIEF DE {next_month.upper()}
