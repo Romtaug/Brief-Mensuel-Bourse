@@ -1266,7 +1266,7 @@ Frais, biais, hasard : tout joue contre toi en stock-picking pur.
 Solution : ETF en socle, stock-picking pour le fun.
 Ce brief alimente la 2e partie."""
 
-    BAR_S = "━" * 32
+    BAR_S = "━" * 26
 
     # ── Top 5 PERF (PEA+CTO mélangés, avec 2 liens chacun) ───────────
     perf_rows = "\n\n".join(_row_perf_post(r.to_dict(), i)
@@ -1293,15 +1293,13 @@ Ce brief alimente la 2e partie."""
 
 {sec_cto_rows}"""
 
-    # ── Règle d'or ───────────────────────────────────────────────────
+    # ── Règle d'or (compactée) ───────────────────────────────────────
     rule_dor = f"""\
 🎯 RÈGLE D'OR
-SOCLE (50-60%) = 2 ETF mondiaux. Tu copies le marché.
+SOCLE (50-60%) = 2 ETF mondiaux.
 🇺🇸 ETF S&P 500 {ETF_SP500_URL}
 🇪🇺 ETF STOXX 600 {ETF_STOXX_URL}
-FUN (40-50% max) = stock-picking diversifié.
-🔀 Vise 1 action par secteur minimum : Tech, Finance, Santé, Industrie...
-Quand un secteur baisse, un autre compense."""
+FUN (40-50%) = stock-picking diversifié, 1 action / secteur min."""
 
     # ── CTA + Parrainage + RDV + Hashtags ────────────────────────────
     cta_etc = f"""\
@@ -1328,16 +1326,15 @@ ETF · Stock-picking · Hybride ? Détaille en commentaire 👇
 📊 BRIEF BOURSE · {period_fr}
 {BAR_S}
 
-📈 TOP 5 PERFORMANCES DU MOIS
-Ce qui a le plus monté en {prev_month_fr} (PEA + CTO confondus).
+📈 TOP 5 PERFORMANCES — {prev_month_fr}
+Le plus monté ce mois-ci (PEA+CTO).
 
 {perf_rows}
 
 {BAR_S}
 
-⭐ TOP 5 POTENTIEL (cible analystes + dividende)
-Score = upside 12 mois + rendement dividende.
-Étoiles = consensus analystes (★★★★★ = Achat fort).
+⭐ TOP 5 POTENTIEL (cible + dividende)
+Score = cible 12m + div. ★★★★★ = consensus achat fort.
 
 {pot_rows}
 
@@ -1361,22 +1358,21 @@ Score = upside 12 mois + rendement dividende.
 📊 BRIEF BOURSE · {period_fr}
 {BAR_S}
 
-📈 TOP 5 PERFORMANCES DU MOIS
-Ce qui a le plus monté en {prev_month_fr} (PEA + CTO confondus).
+📈 TOP 5 PERFORMANCES — {prev_month_fr}
+Le plus monté ce mois-ci (PEA+CTO).
 
 {perf_rows}
 
 {BAR_S}
 
-⭐ TOP 5 POTENTIEL (cible analystes + dividende)
-Score = upside 12 mois + rendement dividende.
-Étoiles = consensus analystes (★★★★★ = Achat fort).
+⭐ TOP 5 POTENTIEL (cible + dividende)
+Score = cible 12m + div. ★★★★★ = consensus achat fort.
 
 {pot_rows}
 
 {BAR_S}
 
-👇 Voir le TOP 10 PREDICTION PAR SECTEUR en 1er commentaire 👇
+👇 TOP 10 PREDICTION PAR SECTEUR en 1er commentaire 👇
 
 {BAR_S}
 
@@ -1397,11 +1393,57 @@ Score = upside 12 mois + rendement dividende.
     log.info("  ✅ Post sans secteurs : %d/%d chars",
              len(post_without_sectors), LINKEDIN_POST_MAX)
 
-    # Vérif que la version split rentre, sinon faut tronquer
-    if len(post_without_sectors) > LINKEDIN_POST_MAX:
-        log.error("❌ Même sans secteurs le post fait %d chars > %d",
-                  len(post_without_sectors), LINKEDIN_POST_MAX)
-        raise RuntimeError(f"Post trop long même sans secteurs : {len(post_without_sectors)} chars")
+    # ── Fallback cascade si encore trop long ─────────────────────────
+    final_post = post_without_sectors
+    if len(final_post) > LINKEDIN_POST_MAX:
+        log.warning("  ⚠️  Post sans secteurs encore trop long (%d > %d) — tronque le hook étendu",
+                    len(final_post), LINKEDIN_POST_MAX)
+        # Hook court : juste benchmarks + accroche actions (drop "85% des fonds..." + "Frais...")
+        hook_court = (
+            f"""{bench_line}🚨 {N_ACTIONS_DISPLAY} actions analysées ce mois-ci.
+
+ETF en socle, stock-picking pour le fun. Le brief alimente la 2e partie."""
+        )
+        final_post = f"""\
+{hook_court}
+
+{BAR_S}
+📊 BRIEF BOURSE · {period_fr}
+{BAR_S}
+
+📈 TOP 5 PERFORMANCES — {prev_month_fr}
+Le plus monté ce mois-ci (PEA+CTO).
+
+{perf_rows}
+
+{BAR_S}
+
+⭐ TOP 5 POTENTIEL (cible + dividende)
+Score = cible 12m + div. ★★★★★ = consensus achat fort.
+
+{pot_rows}
+
+{BAR_S}
+
+👇 TOP 10 PREDICTION PAR SECTEUR en 1er commentaire 👇
+
+{BAR_S}
+
+{rule_dor}
+
+{BAR_S}
+
+{cta_etc}"""
+        log.info("  ✓ Version ultra-compacte : %d chars", len(final_post))
+
+    if len(final_post) > LINKEDIN_POST_MAX:
+        # Vraiment impossible — on raise pour visibilité
+        log.error("❌ Même la version ultra-compacte fait %d chars > %d",
+                  len(final_post), LINKEDIN_POST_MAX)
+        raise RuntimeError(
+            f"Post trop long même en version ultra-compacte : {len(final_post)} chars. "
+            "Réduis N_TOP ou la longueur des liens Boursorama."
+        )
 
     # Commentaire = section secteurs complète
     # Si elle dépasse 1250 chars (limite commentaire), on dégrade à 1 lien par secteur
@@ -1428,7 +1470,7 @@ Score = upside 12 mois + rendement dividende.
         log.warning("  ⚠️  Commentaire encore trop long (%d chars > %d) — il sera tronqué côté Make.com",
                     len(comment), LINKEDIN_COMMENT_MAX)
 
-    return post_without_sectors, comment
+    return final_post, comment
 
 
 def build_linkedin_post(rk: Rankings, period_fr: str, prev_month_fr: str,
