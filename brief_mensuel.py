@@ -2478,7 +2478,7 @@ def send_webhook(snapshot: str, period_fr: str, post: str, comment: str,
         "period":       period_fr,
         "message":      f"Brief Mensuel Bourse — {period_fr.title()} — {n_disp} actions",
         "filename":     video_path.name,
-        "video_url":    video_url,
+        "video_base64": video_url,  # NB: contient la base64 (renommé pour clarté côté Make.com)
         "video_mime":   "video/mp4",
         "video_title":  f"Brief Mensuel Bourse · {period_fr.title()} · {n_disp} actions analysées",
         "post_text":    post,
@@ -2589,16 +2589,21 @@ def main() -> int:
         banner("🎬  GÉNÉRATION VIDÉO")
         video_path = make_video(rk, snapshot, period_fr)
 
-        # ── 9. Upload litterbox ─────────────────────────────────────
+        # ── 9. Encodage base64 + Webhook (skip litterbox) ───────────
         if send_webhook_flag:
-            banner("⬆  UPLOAD + WEBHOOK")
-            video_url = upload_to_litterbox(video_path)
+            banner("📤  WEBHOOK BASE64 (skip litterbox)")
+            # Encode vidéo en base64 (pas d'upload externe)
+            video_bytes = video_path.read_bytes()
+            video_b64 = base64.b64encode(video_bytes).decode("utf-8")
+            size_mb = len(video_bytes) / (1024 * 1024)
+            size_b64_mb = len(video_b64) / (1024 * 1024)
+            log.info("📦  Vidéo MP4 : %.1f MB → base64 : %.1f MB", size_mb, size_b64_mb)
+            if size_b64_mb > 5:
+                log.warning("⚠️  Payload base64 (%.1f MB) > 5 MB limite Make.com Core/Free !",
+                            size_b64_mb)
 
-            # ── 10. Envoi webhook ───────────────────────────────────
             send_webhook(snapshot, period_fr, post, comment,
-                         video_url, video_path, rk.n_total)
-        else:
-            log.info("ℹ️  SEND_TO_WEBHOOK=false → pas d'upload ni de webhook")
+                         video_b64, video_path, rk.n_total)
 
         # ── Banner final ─────────────────────────────────────────────
         banner("✅  BRIEF MENSUEL TERMINÉ", char="═")
