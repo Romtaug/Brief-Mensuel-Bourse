@@ -95,7 +95,7 @@ SLEEP_BETWEEN_UNI  = 15            # secondes entre 2 univers (anti rate-limit)
 SLEEP_AFTER_BENCH  = 10            # secondes après les benchmarks avant fetch universe
 
 # ── LinkedIn ─────────────────────────────────────────────────────────
-LINKEDIN_POST_MAX  = 3000          # Limite officielle API LinkedIn UGC Posts
+LINKEDIN_POST_MAX  = 99999         # Limite officielle API LinkedIn UGC Posts
 LINKEDIN_COMMENT_MAX = 1250        # Limite officielle commentaires LinkedIn
 N_ACTIONS_DISPLAY  = "+1000"       # Texte figé dans le hook (peu importe la valeur réelle)
 
@@ -124,9 +124,8 @@ ETF_STOXX_URL     = "https://www.boursorama.com/bourse/trackers/cours/1rTESE/"
 # Format LinkedIn Feed optimal : 1080×1350 portrait 4:5
 VIDEO_W, VIDEO_H = 1080, 1350
 VIDEO_FPS        = 30
-VIDEO_CRF        = 12              # 12 = quasi-lossless (max qualité demandée)
-VIDEO_PRESET     = "placebo"       # Compression max (encodage très lent ~10-15min)
-
+VIDEO_CRF        = 18
+VIDEO_PRESET     = "veryslow"
 # ── Vidéo : timing total = 30s pile ──────────────────────────────────
 DUR_COVER        = 4.0
 DUR_TOP_PERF     = 5.0
